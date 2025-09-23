@@ -1,0 +1,42 @@
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    font-size: 22px;
+}
+
+[uid]:hover {
+    pointer-events: visible !important;
+    border: outset 3px greenyellow;
+    padding: 5px;
+}
+
+body {
+    position: relative !important;
+    background-color: rgb(57, 67, 68);
+    /* overflow: hidden; */
+}
+
+.context-button {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    width: 100%;
+    color: white;
+    fill: white;
+    background-color: slategrey;
+    padding: .2em .3em;
+    transition: all linear 133ms;
+    user-select: none;
+    cursor: pointer;
+}
+
+.context-button:hover {
+    background-color: white;
+    color: slategrey;
+    fill: slategrey;
+}
+
+.context-button:not(:last-child) {
+    border-bottom: solid 1px white;
+}
