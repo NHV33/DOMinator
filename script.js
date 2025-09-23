@@ -363,12 +363,14 @@ function renderEditor(_targetElement) {
 
     const cssInputFields = [
       // TODO: add default units per property
-      { propName: 'color', eventType: 'change', label: 'Text Color', dom: { tag: 'input', type: 'color' } },
-      { propName: 'backgroundColor', eventType: 'change', label: 'Background Color', dom: { tag: 'input', type: 'color' } },
-      { propName: 'fontSize', eventType: 'input', label: 'Font Size', dom: { tag: 'input', type: 'range' } },
-      { propName: 'minWidth', eventType: 'input', label: 'Min Width', dom: { tag: 'input', type: 'range' } },
-      { propName: 'minHeight', eventType: 'input', label: 'Min Height', dom: { tag: 'input', type: 'range' } },
-      { propName: 'borderRadius', eventType: 'input', label: 'Border Radius', dom: { tag: 'input', type: 'range' } },
+      { propName: 'color', label: 'Text Color', dom: { tag: 'input', type: 'color' } },
+      { propName: 'backgroundColor', label: 'Background Color', dom: { tag: 'input', type: 'color' } },
+      { propName: 'fontSize', label: 'Font Size', dom: { tag: 'input', type: 'range' } },
+      { propName: 'minWidth', label: 'Min Width', dom: { tag: 'input', type: 'range' } },
+      { propName: 'minHeight', label: 'Min Height', dom: { tag: 'input', type: 'range' } },
+      { propName: 'borderRadius', label: 'Border Radius', dom: { tag: 'input', type: 'range' } },
+      { propName: 'display', label: 'Display Type', dom: { tag: 'select' }, default: 'flex', choices: ['block', 'inline', 'inline-block', 'flex', 'inline-flex', 'grid', 'inline-grid', 'flow-root', 'none', 'contents', 'block flex', 'block flow', 'block flow-root', 'block grid', 'inline flex', 'inline flow', 'inline flow-root', 'inline grid', 'table', 'table-row', 'list-item'] },
+      { propName: 'flex-direction', label: 'Flex Direction', dom: { tag: 'select' }, default: 'row', choices: ['row', 'row-reverse', 'column', 'column-reverse'] },
     ]
 
     cssInputFields.forEach((field) => {
@@ -407,7 +409,14 @@ function renderEditor(_targetElement) {
         }
       }
 
-      if (field.dom.type === 'range') {
+      if (field.dom.tag === 'select') {
+        const globalCssProps = ['inherit', 'initial', 'revert', 'revert-layer', 'unset']
+        const allChoices = [...field.choices, ...globalCssProps]
+        allChoices.forEach((choiceName) => {
+          newElement({ tag: 'option', parent: fieldElem, value: choiceName, text: choiceName })
+        })
+        fieldElem.value = allChoices.includes(getVerbatim()) ? getVerbatim() : ''
+      } else if (field.dom.type === 'range') {
         // handle slider-type input
         fieldElem.addEventListener('input', () => {
           field.newValue = `${parseCssValue(fieldElem.value)}${getVerbatimUnit()}`
@@ -434,13 +443,14 @@ function renderEditor(_targetElement) {
         unitInputBox.addEventListener('change', () => {
           const escapedUnit = getVerbatimUnit().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
           const replaceUnitExp = new RegExp(`${escapedUnit}$`)
-          field.newValue = getVerbatim.replace(replaceUnitExp, unitInputBox.value)
+          const currentVerbatim = getVerbatim() || '0px'
+          field.newValue = currentVerbatim.replace(replaceUnitExp, unitInputBox.value)
           updateTargetElementCss(rerender = true)
         })
 
         const settingsByUnit = {
           default: { step: 0.01, range: 100 },
-          px: { step: 1, range: 1000 },
+          px: { step: 1, range: 500 },
           em: { step: 0.01, range: 10 },
           '%': { step: 0.01, range: 100 },
         }
