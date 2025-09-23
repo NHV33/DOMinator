@@ -361,17 +361,14 @@ function renderEditor(_targetElement) {
       return parsedUnit || 'px'
     }
 
-    const getUnit = (propName) => parseCssUnit(_targetMetadata.verbatimStyle[propName])
-    const getValue = (propName) => parseCssValue(_targetMetadata.verbatimStyle[propName])
-
     const cssInputFields = [
       // TODO: add default units per property
-      { propName: 'color', eventType: 'change', label: 'Text Color', dom: { tag: 'input', type: 'color' }, setInput(inputElem) { inputElem.value = _targetMetadata.verbatimStyle[this.propName] }, getInput(inputElem) { return inputElem.value } },
-      { propName: 'backgroundColor', eventType: 'change', label: 'Background Color', dom: { tag: 'input', type: 'color' }, setInput(inputElem) { inputElem.value = _targetMetadata.verbatimStyle[this.propName] }, getInput(inputElem) { return inputElem.value } },
-      { propName: 'fontSize', eventType: 'input', label: 'Font Size', dom: { tag: 'input', type: 'range' }, unit() { return parseCssUnit(_targetMetadata.verbatimStyle[this.propName]) }, setInput(inputElem) { inputElem.value = parseCssValue(_targetMetadata.verbatimStyle[this.propName]) }, getInput(inputElem) { return inputElem.value + this.unit() } },
-      { propName: 'minWidth', eventType: 'input', label: 'Min Width', dom: { tag: 'input', type: 'range' }, unit() { return parseCssUnit(_targetMetadata.verbatimStyle[this.propName]) }, setInput(inputElem) { inputElem.value = parseCssValue(_targetMetadata.verbatimStyle[this.propName]) }, getInput(inputElem) { return inputElem.value + this.unit() } },
-      { propName: 'minHeight', eventType: 'input', label: 'Min Height', dom: { tag: 'input', type: 'range' }, unit() { return parseCssUnit(_targetMetadata.verbatimStyle[this.propName]) }, setInput(inputElem) { inputElem.value = parseCssValue(_targetMetadata.verbatimStyle[this.propName]) }, getInput(inputElem) { return inputElem.value + this.unit() } },
-      { propName: 'borderRadius', eventType: 'input', label: 'Border Radius', dom: { tag: 'input', type: 'range' }, unit() { return parseCssUnit(_targetMetadata.verbatimStyle[this.propName]) }, setInput(inputElem) { inputElem.value = parseCssValue(_targetMetadata.verbatimStyle[this.propName]) }, getInput(inputElem) { return inputElem.value + this.unit() } },
+      { propName: 'color', eventType: 'change', label: 'Text Color', dom: { tag: 'input', type: 'color' } },
+      { propName: 'backgroundColor', eventType: 'change', label: 'Background Color', dom: { tag: 'input', type: 'color' } },
+      { propName: 'fontSize', eventType: 'input', label: 'Font Size', dom: { tag: 'input', type: 'range' } },
+      { propName: 'minWidth', eventType: 'input', label: 'Min Width', dom: { tag: 'input', type: 'range' } },
+      { propName: 'minHeight', eventType: 'input', label: 'Min Height', dom: { tag: 'input', type: 'range' } },
+      { propName: 'borderRadius', eventType: 'input', label: 'Border Radius', dom: { tag: 'input', type: 'range' } },
     ]
 
     cssInputFields.forEach((field) => {
@@ -393,14 +390,15 @@ function renderEditor(_targetElement) {
         })
       }
 
-      field.setInput(fieldElem)
+      const getVerbatim = () => _targetMetadata.verbatimStyle[field.propName]
+      const getVerbatimNum = () => parseCssValue(_targetMetadata.verbatimStyle[field.propName])
+      const getVerbatimUnit = () => parseCssUnit(_targetMetadata.verbatimStyle[field.propName])
 
       function updateTargetElementCss(rerender = false) {
-        if (field.dom.type === 'range') {
+        // update the global state from the 'newValue' property on the loop variable (obj)
+        // when undefined, set 'newValue' directly from the input element value (see universal 'change' event below)
+        _targetMetadata.verbatimStyle[field.propName] = field.newValue
 
-        } else {
-          _targetMetadata.verbatimStyle[field.propName] = field.getInput(fieldElem)
-        }
         const newTargetElem = updateElement(_targetElement, {
           style: styleObjectToString(_targetMetadata.verbatimStyle),
         })
@@ -410,12 +408,13 @@ function renderEditor(_targetElement) {
       }
 
       if (field.dom.type === 'range') {
-        fieldElem.addEventListener('input', (event) => {
+        // handle slider-type input
+        fieldElem.addEventListener('input', () => {
+          field.newValue = `${parseCssValue(fieldElem.value)}${getVerbatimUnit()}`
           updateTargetElementCss()
 
           // show tooltip
-          const currentValue = _targetMetadata.verbatimStyle[field.propName]
-          updateElement(infoTooltip, { text: currentValue })
+          updateElement(infoTooltip, { text: getVerbatim() || 0 })
           moveToMousePos(infoTooltip, MOUSE_STATE.pos, { offset: pos2d(0, -33) })
           toggleVisible(infoTooltip, true)
         })
@@ -425,27 +424,19 @@ function renderEditor(_targetElement) {
           toggleVisible(infoTooltip, false)          
         })
 
-        const numInputBox = newElement({ tag: 'input', parent: labelAndUnit, siblingIndex: 1, value: getValue(field.propName), style: 'margin-left: 10px; width: 77px; height: 0.7em font-size: 0.6em; text-align: center; border-radius: 5px;' })
+        const numInputBox = newElement({ tag: 'input', parent: labelAndUnit, siblingIndex: 1, value: getVerbatimNum(), style: 'margin-left: 10px; width: 77px; height: 0.7em font-size: 0.6em; text-align: center; border-radius: 5px;' })
         numInputBox.addEventListener('change', () => {
-          if (numInputBox.value === '33') {
-            field.remember = 'yes'
-          }
-          console.log(field.remember)
-          console.log(parseCssValue(numInputBox.value) + field.unit())
-          _targetMetadata.verbatimStyle[field.propName] = `${parseCssValue(numInputBox.value)}${field.unit()}`
-          console.log(_targetMetadata.verbatimStyle[field.propName])
+          field.newValue = `${parseCssValue(numInputBox.value)}${getVerbatimUnit()}`
           updateTargetElementCss(rerender = true)
         })
 
-        const unitInputBox = newElement({ tag: 'input', parent: labelAndUnit, siblingIndex: 2, value: field.unit(), style: 'margin-left: 10px; width: 77px; height: 0.7em font-size: 0.6em; text-align: center; border-radius: 5px;' })
+        const unitInputBox = newElement({ tag: 'input', parent: labelAndUnit, siblingIndex: 2, value: getVerbatimUnit(), style: 'margin-left: 10px; width: 77px; height: 0.7em font-size: 0.6em; text-align: center; border-radius: 5px;' })
         unitInputBox.addEventListener('change', () => {
-          const escapedUnit = field.unit().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+          const escapedUnit = getVerbatimUnit().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
           const replaceUnitExp = new RegExp(`${escapedUnit}$`)
-          _targetMetadata.verbatimStyle[field.propName] = _targetMetadata.verbatimStyle[field.propName].replace(replaceUnitExp, unitInputBox.value)
+          field.newValue = getVerbatim.replace(replaceUnitExp, unitInputBox.value)
           updateTargetElementCss(rerender = true)
         })
-
-        const currentNumValue = parseCssValue(_targetMetadata.verbatimStyle[field.propName])
 
         const settingsByUnit = {
           default: { step: 0.01, range: 100 },
@@ -454,18 +445,24 @@ function renderEditor(_targetElement) {
           '%': { step: 0.01, range: 100 },
         }
 
-        const unitSettings = settingsByUnit[field.unit()] || settingsByUnit.default
+        const unitSettings = settingsByUnit[getVerbatimUnit()] || settingsByUnit.default
 
-        fieldElem.min = currentNumValue - unitSettings.range
-        fieldElem.max = currentNumValue + unitSettings.range
+        fieldElem.min = getVerbatimNum() - unitSettings.range
+        fieldElem.max = getVerbatimNum() + unitSettings.range
         fieldElem.step = unitSettings.step
-        fieldElem.value = currentNumValue
-        const minLabelnewElement = newElement({ parent: fieldRow, text: `${Number(fieldElem.min).toFixed(2)}${field.unit()}`, siblingIndex: 0, style: 'color: white; font-size: 0.7em; margin-inline: 5px;' })
-        const maxLabelnewElement = newElement({ parent: fieldRow, text: `${Number(fieldElem.max).toFixed(2)}${field.unit()}`, siblingIndex: 2, style: 'color: white; font-size: 0.7em; margin-inline: 5px;' })
+        fieldElem.value = getVerbatimNum()
+        const minLabelnewElement = newElement({ parent: fieldRow, text: `${Number(fieldElem.min).toFixed(2)}${getVerbatimUnit()}`, siblingIndex: 0, style: 'color: white; font-size: 0.7em; margin-inline: 5px;' })
+        const maxLabelnewElement = newElement({ parent: fieldRow, text: `${Number(fieldElem.max).toFixed(2)}${getVerbatimUnit()}`, siblingIndex: 2, style: 'color: white; font-size: 0.7em; margin-inline: 5px;' })
+      } else {
+        // generic case: for CSS properties set directly with the input field value
+        fieldElem.value = getVerbatim()
       }
 
-      // always add a 'change' event that updates the form (terminates user input because of re-render)
+      // universally added 'change' event that updates the form (terminates user input because of re-render)
       fieldElem.addEventListener('change', () => {
+        if (field.newValue === undefined) {
+          field.newValue = fieldElem.value // generic case (direct input)
+        }
         updateTargetElementCss(rerender = true)
       })
     })
