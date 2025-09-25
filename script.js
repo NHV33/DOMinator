@@ -1,27 +1,57 @@
+var MOUSE_STATE = {
+  pos: pos2d(0, 0)
+}
+
+document.addEventListener('mousemove', (mouseEvent) => {
+  MOUSE_STATE.pos = pos2d(mouseEvent.clientX, mouseEvent.clientY)
+})
+
+/** Returns a 13-digit String() based on the current millisecond-level UNIX timestamp */
+function getNewUid() {
+  return String(new Date().getTime())
+}
+
+/** Checks if a UID is a string consisting of 13 digits (a UNIX timestamp, like '1631367180000') */
+function isValidUid(uid) {
+  return /^\d{13}$/.test(String(uid)) ? true : false
+}
+
+/** Returns the UID stored on the element's 'uid' attr as a String() if found, else null */
+function getElementUid(element) {
+  const uid = element.getAttribute('uid')
+  const isNotNull = !['', 'null', 'undefined', null, undefined].includes(uid)
+  return isNotNull && isValidUid(uid) ? String(uid) : null
+}
+
 var UNIQUE_UID_LIST = new Set()
 var ELEMENTS_WITHOUT_UID = new Set()
 
 var ELEMENTS = {}
 
-function addElementMetadata(uid) {
-  ELEMENTS[uid] = {
-    uid: uid,
-    verbatimStyle: '',
+function addElementMetadata(newUid) {
+  newUid = String(newUid)
+  ELEMENTS[newUid] = {
+    uid: newUid,
+    verbatimStyle: {},
   }
 }
 
-function getNewUid() {
-  return Number(new Date().getTime())
-}
-
-function getElementUid(element) {
-  const uid = element.getAttribute('uid')
-  return ['', 'null', 'undefined', null, undefined].includes(uid) ? null : uid
+function cloneElementMetadata(existingUid, newUid) {
+  existingUid = String(existingUid)
+  newUid = String(newUid)
+  const existingMetadata = ELEMENTS[existingUid]
+  if (existingUid && existingMetadata) {
+    ELEMENTS[newUid] = deepClone(existingMetadata)
+    ELEMENTS[newUid].uid = newUid
+  } else {
+    addElementMetadata(newUid)
+  }
 }
 
 var STR = {
   nullInput: '#NULL#',
   pageBuildArea: 'page-build-area',
+  pageBuildAreaId: '1631367180000',
   pageBuildToolbar: 'page-build-toolbar',
   newElementText: 'New Element',
 }
@@ -52,38 +82,66 @@ function forAllElements(updateFunc, rootNode = null) {
 function bulkAssignUids() {
   // re-check unique set of UIDs
   forAllElements(scanForUniqueIds)
-  const baseUid = getNewUid()
+  const baseUid = Number(getNewUid())
   ELEMENTS_WITHOUT_UID.forEach((element, index) => {
-    element.setAttribute('uid', baseUid + index)
+    element.setAttribute('uid', `${baseUid + index}`)
   })
   ELEMENTS_WITHOUT_UID.clear()
 }
 
-function bulkReassignUids(rootNode) {
-  UNIQUE_UID_LIST.clear()
-  ELEMENTS_WITHOUT_UID.clear()
-  // re-check unique set of UIDs
-  forAllElements(scanForUniqueIds)
-  // elements with UIDs within the specified node (e.g., a recently duplicated node)
-  const elementsWithUid = rootNode.querySelectorAll('[uid]')  
+// "example-name" => "example-name (1)" | "example-name (32)" => "example-name (33)"
+var ID_SUFFIX_PATTERN = { prefix: ' (', suffix: ')', startAt: 1 } // todo: relocate this constant somewhere
 
-  const baseUid = getNewUid()
-  elementsWithUid.forEach((element, index) => {
-    const existingUid = getElementUid(element)
-    if (!UNIQUE_UID_LIST.has(existingUid)) return // skip if UID is unique
+function getUniqueIdAttr(element) {
+  const existingIdAttr = element.getAttribute('id')
+  let newIdAttr = existingIdAttr
+  
+  const isNull = ['', 'null', 'undefined', null, undefined].includes(existingIdAttr)
+  if (isNull || isValidUid(existingIdAttr)) {
+    // update the ID to match its UID if the value was null or if the existing ID was simply a UID
+    newIdAttr = getElementUid(element)
+  } else {
+    const baseId = getUnenumeratedName(existingIdAttr, ID_SUFFIX_PATTERN)
 
-    const newUid = baseUid + index
+    // query all the elements whose IDs start with the base name string
+    const elementsWithBaseId = Array.from(document.querySelectorAll(`[id^="${baseId}"]`))
 
-    element.setAttribute('id', newUid) // overwrite ID with new UID
+    // only reassign ID if not unique (i.e., more than one match is found)
+    if (elementsWithBaseId && elementsWithBaseId.length > 1) {
+      // list of matching IDs sorted in descending order by their (number) suffixes
+      const matchingIdsAndNumberSuffix = elementsWithBaseId.map((matchedElem) => {
+        const id = matchedElem.getAttribute('id')
+        const number = getSuffixNumber(id, ID_SUFFIX_PATTERN) || 0
+        return { number, id }
+      }).sort((a, b) => b.number - a.number )
 
-    const existingMetadata = ELEMENTS[existingUid]
-    if (existingMetadata) {
-      ELEMENTS[newUid] = deepClone(existingMetadata)
-    } else {
-      addElementMetadata(uid)
+      const matchWithHighestSuffix = matchingIdsAndNumberSuffix[0]
+      newIdAttr = renameWithNumericSuffix(matchWithHighestSuffix.id, ID_SUFFIX_PATTERN)
     }
+  }
 
-    element.setAttribute('uid', newUid)
+  return newIdAttr // return the available unique ID value
+}
+
+function reassignUid(element, newUid = null) {
+  const existingUid = getElementUid(element)
+  newUid = newUid || getNewUid()
+  
+  cloneElementMetadata(existingUid, newUid)
+  element.setAttribute('uid', newUid)
+
+  // also update the standard 'id' attr with a unique name
+  element.id = getUniqueIdAttr(element)
+}
+
+function bulkReassignUids(rootNode) {
+  // elements with UIDs within the specified node (e.g., a recently duplicated node)
+  const elementsWithUid = rootNode.querySelectorAll('[uid]')
+
+  const baseUid = Number(getNewUid())
+  elementsWithUid.forEach((element, index) => {
+    const newUid = `${baseUid + index}`
+    reassignUid(element, newUid)
   })
 }
 
@@ -118,8 +176,6 @@ function manageUidsAndMetadata() {
   // create metadata in ELEMENTS for any new elements;
   // remove metadata for any deleted elements
   updateElementMetadata()
-  // check for elements with duplicate UIDs and reassign new ones
-  // bulkReassignUids()
 }
 
 /** Adds colored borders when hovering over editable elements */
@@ -143,7 +199,7 @@ function addCssHoverStyles(depth = 10, hueStep = 50, hueOffset = 77) {
 const editorDialog = newElement({
   tag: 'div',
   style: {
-    position: 'absolute', right: '0', top: '0', padding: '5px', paddingTop: '33px',
+    position: 'absolute', right: '0', top: '0', padding: '5px', paddingTop: '33px', zIndex: '333',
     backgroundColor: 'slategrey', minWidth: '400px', height: '100vh', overflowY: 'scroll',
     visibility: 'hidden', pointerEvents: 'visible',
   },
@@ -245,9 +301,9 @@ function renderContextMenu(event) {
   const totalSiblings = eventTarget.parentNode.children.length
   const hasSiblings = totalSiblings > 1
   const hasNextSibling = getDomSiblingIndex(eventTarget) < totalSiblings - 1
-  const atBuildAreaRoot = getElementUid(eventTarget.parentNode) === STR.pageBuildArea
+  const atBuildAreaRoot = getElementUid(eventTarget.parentNode) === STR.pageBuildAreaId
 
-  if (getElementUid(eventTarget) !== STR.pageBuildArea) {
+  if (getElementUid(eventTarget) !== STR.pageBuildAreaId) {
     buttonDefs = [
       { mdi: 'application-edit-outline', text: 'Edit', action: () => { renderEditor(eventTarget) }, closeAfter: true },
       { mdi: 'content-copy', text: 'Duplicate', action: () => { duplicateElement(eventTarget); toggleVisible(editorDialog, false) }, closeAfter: true },
@@ -287,7 +343,13 @@ function renderEditor(_targetElement) {
   editorDialog.textContent = '' // clear innerHTML of editor
 
   const _targetUid = getElementUid(_targetElement)
-  const _targetMetadata = ELEMENTS[_targetUid] || {}
+  
+  if (_targetUid && !ELEMENTS[_targetUid]) {
+    addElementMetadata(_targetUid)
+    console.warn(`Added missing metadata for uid #${_targetUid}`)
+  }
+
+  const _targetMetadata = ELEMENTS[_targetUid]
 
   removeContextMenu()
   toggleVisible(editorDialog, true)
@@ -314,7 +376,7 @@ function renderEditor(_targetElement) {
     const fieldRefs = []
   
     function updateTargetElement() {
-      const domAttrs = { uid: _targetUid || getNewUid() }
+      const domAttrs = { uid: _targetUid || getNewUid() } // todo: check if safe
       fieldRefs.forEach((field) => {
         const fieldValue = field.value()
         if (fieldValue === STR.nullInput) {
@@ -441,7 +503,7 @@ function renderEditor(_targetElement) {
 
         const unitInputBox = newElement({ tag: 'input', parent: labelAndUnit, siblingIndex: 2, value: getVerbatimUnit(), style: 'margin-left: 10px; width: 77px; height: 0.7em font-size: 0.6em; text-align: center; border-radius: 5px;' })
         unitInputBox.addEventListener('change', () => {
-          const escapedUnit = getVerbatimUnit().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+          const escapedUnit = escapeMeta(getVerbatimUnit())
           const replaceUnitExp = new RegExp(`${escapedUnit}$`)
           const currentVerbatim = getVerbatim() || '0px'
           field.newValue = currentVerbatim.replace(replaceUnitExp, unitInputBox.value)
@@ -517,27 +579,27 @@ function changeSiblingIndex(element, offset) {
 }
 
 function moveInsideSibling(element, offset = 1) {
-    const totalSiblings = element.parentNode.children.length
-    const siblingIndex = getDomSiblingIndex(element) || 0
-    const nextSiblingIndex = siblingIndex + offset < totalSiblings ? siblingIndex + offset : 0
-    const nextSibling = element.parentNode.children[nextSiblingIndex]
-    if (siblingIndex !== nextSiblingIndex && element !== nextSibling)
+  const totalSiblings = element.parentNode.children.length
+  const siblingIndex = getDomSiblingIndex(element) || 0
+  const nextSiblingIndex = siblingIndex + offset < totalSiblings ? siblingIndex + offset : 0
+  const nextSibling = element.parentNode.children[nextSiblingIndex]
+  if (siblingIndex !== nextSiblingIndex && element !== nextSibling) {
     nextSibling.prepend(element)
   }
+}
 
 function duplicateElement(element) {
-  const uid = getNewUid() // persistent unique ID
   const siblingIndex = getDomSiblingIndex(element)
   
   let newElem = element.cloneNode(true)
   newElem = updateElement(newElem, {
-    id: `${element.id}-copy`,
-    uid: String(uid),
     parent: element.parentNode,
-    siblingIndex: siblingIndex + 1,
+    siblingIndex: siblingIndex + 1, // Todo: check in overflow handled in utils.js
   })
 
-  bulkReassignUids(newElem)
+  reassignUid(newElem) // handle reassignment of parent
+
+  bulkReassignUids(newElem) // reassign children
 }
 
 function addNewDefaultElement(customAttrs = {}) {
@@ -565,7 +627,6 @@ function addNewDefaultElement(customAttrs = {}) {
 
   // set the style via the 'verbatimStyle' metadata, to prevent computed styles like "webkit-____" from being added
   addElementMetadata(uid)
-  // ELEMENTS[uid].verbatimStyle = styleObjectToString(defaultStyle).replace(/; /g, ';\n')
   ELEMENTS[uid].verbatimStyle = defaultStyle
 
   if (attrs.parent.nodeName === 'HTML') {
@@ -582,11 +643,12 @@ function addNewDefaultElement(customAttrs = {}) {
 }
 
 const pageBuildArea = addNewDefaultElement({
-  uid: STR.pageBuildArea,
+  uid: STR.pageBuildAreaId,
   id: STR.pageBuildArea,
   parent: document.body,
   text: '',
   style: {
+    position: 'relative',
     fontSize: '1em',
     minHeight: '100vh',
     width: '100%',
@@ -649,12 +711,4 @@ const resetBuildArea = newElement({
 
 resetBuildArea.addEventListener('click', () => {
   getElement(STR.pageBuildArea).textContent = ''
-})
-
-var MOUSE_STATE = {
-  pos: pos2d(0, 0)
-}
-
-document.addEventListener('mousemove', (mouseEvent) => {
-  MOUSE_STATE.pos = pos2d(mouseEvent.clientX, mouseEvent.clientY)
 })

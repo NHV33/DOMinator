@@ -1,11 +1,42 @@
 const deepClone = obj => JSON.parse(JSON.stringify(obj));
 
+/** Returns a string with all regex metacharacters .*+?^${}()|[] escaped. */
+const escapeMeta = (string) => String(string).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/** Returns a regex pattern matching one or more digits wrapped inside 'prefix' and 'suffix'. */
+function getNumericSuffixRegex({ prefix = '(', suffix = ')' } = {}) {
+  return new RegExp(`${escapeMeta(prefix)}(\\d+)${escapeMeta(suffix)}$`);
+}
+
+/** Returns a string without a numeric suffix matching the defined pattern. */
+function getUnenumeratedName(string, { prefix = '(', suffix = ')' } = {}) {
+  return String(string).replace(getNumericSuffixRegex({ prefix, suffix }), '');
+}
+
+/** Return a Number() from the suffix if detected, else null. */
+function getSuffixNumber(string, { prefix = '(', suffix = ')' } = {}) {
+  const match = String(string).match(getNumericSuffixRegex({ prefix, suffix }));
+  return match ? parseInt(match[1]) : null;
+}
+
+/** Returns a string with a new numeric suffix, or increments an existing one. */
+function renameWithNumericSuffix(string, { prefix = '(', suffix = ')', startAt = 1 } = {}) {
+  let number = getSuffixNumber(string, { prefix, suffix });
+  number = number === null ? startAt : number + 1; // increment the suffix number if present
+  const baseName = getUnenumeratedName(string, { prefix, suffix });
+  return `${baseName}${prefix}${number}${suffix}`;
+}
+
 function isObject(variable) {
   return (
     typeof variable === 'object' &&
     variable !== null &&
     !Array.isArray(variable)
   )
+}
+
+function isEmptyObject(obj) {
+  return obj && Object.keys(obj).length === 0 && obj.constructor === Object;
 }
 
 function getObjValues(obj) {
